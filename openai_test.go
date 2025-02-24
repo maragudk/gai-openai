@@ -1,11 +1,8 @@
 package gai_test
 
 import (
-	"context"
-	"strings"
 	"testing"
 
-	"github.com/openai/openai-go"
 	"maragu.dev/env"
 	"maragu.dev/is"
 
@@ -19,22 +16,31 @@ func TestNewOpenAIClient(t *testing.T) {
 	})
 }
 
-func TestOpenAIClientCompletion(t *testing.T) {
+func TestOpenAIClient_Complete(t *testing.T) {
+	t.Run("can send a streaming chat completion request", func(t *testing.T) {
+		c := newOpenAIClient()
+
+		prompt := gai.Prompt{
+			Model: gai.ModelGPT4oMini,
+			Messages: []gai.Message{
+				gai.NewUserTextMessage("Hi!"),
+			},
+			Temperature: gai.Ptr(0.0),
+		}
+
+		res := c.Complete(t.Context(), prompt)
+
+		var text string
+		for part, err := range res.Parts() {
+			is.NotError(t, err)
+			text += part.Text()
+		}
+		is.Equal(t, "Hello! How can I assist you today?", text)
+	})
+}
+
+func newOpenAIClient() *gai.OpenAIClient {
 	_ = env.Load(".env.test.local")
 
-	t.Run("can do a basic chat completion", func(t *testing.T) {
-		client := gai.NewOpenAIClient(gai.NewOpenAIClientOptions{Key: env.GetStringOrDefault("OPENAI_KEY", "")})
-		is.NotNil(t, client)
-
-		res, err := client.Client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
-			Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
-				openai.SystemMessage(`Only say the word "Hi", nothing more.`),
-				openai.UserMessage("Hi."),
-			}),
-			Model: openai.F(openai.ChatModelGPT4oMini),
-		})
-		is.NotError(t, err)
-		is.True(t, len(res.Choices) > 0)
-		is.True(t, strings.Contains(res.Choices[0].Message.Content, "Hi"))
-	})
+	return gai.NewOpenAIClient(gai.NewOpenAIClientOptions{Key: env.GetStringOrDefault("OPENAI_KEY", "")})
 }
