@@ -1,4 +1,4 @@
-module openai
+module maragu.dev/openai
 
 go 1.24
 
