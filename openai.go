@@ -1,4 +1,4 @@
-package gai
+package openai
 
 import (
 	"context"
@@ -16,18 +16,18 @@ const (
 	ModelGPT4oMini = gai.ChatModel(openai.ChatModelGPT4oMini)
 )
 
-type OpenAIClient struct {
+type Client struct {
 	Client *openai.Client
 	log    *slog.Logger
 }
 
-type NewOpenAIClientOptions struct {
+type NewClientOptions struct {
 	BaseURL string
 	Key     string
 	Log     *slog.Logger
 }
 
-func NewOpenAIClient(opts NewOpenAIClientOptions) *OpenAIClient {
+func NewClient(opts NewClientOptions) *Client {
 	if opts.Log == nil {
 		opts.Log = slog.New(slog.DiscardHandler)
 	}
@@ -45,14 +45,14 @@ func NewOpenAIClient(opts NewOpenAIClientOptions) *OpenAIClient {
 		clientOpts = append(clientOpts, option.WithAPIKey(opts.Key))
 	}
 
-	return &OpenAIClient{
+	return &Client{
 		Client: openai.NewClient(clientOpts...),
 		log:    opts.Log,
 	}
 }
 
 // Complete satisfies [Completer].
-func (c *OpenAIClient) Complete(ctx context.Context, p gai.Prompt) gai.CompletionResponse {
+func (c *Client) Complete(ctx context.Context, p gai.Prompt) gai.CompletionResponse {
 	var messages []openai.ChatCompletionMessageParamUnion
 	for _, m := range p.Messages {
 		switch m.Role {

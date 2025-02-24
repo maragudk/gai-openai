@@ -1,12 +1,13 @@
-package gai_test
+package openai_test
 
 import (
 	"testing"
 
 	"maragu.dev/env"
+	"maragu.dev/gai"
 	"maragu.dev/is"
 
-	"maragu.dev/gai"
+	"maragu.dev/openai"
 )
 
 func TestNewOpenAIClient(t *testing.T) {
@@ -18,7 +19,7 @@ func TestNewOpenAIClient(t *testing.T) {
 
 func TestOpenAIClient_Complete(t *testing.T) {
 	t.Run("can send a streaming chat completion request", func(t *testing.T) {
-		c := newOpenAIClient()
+		c := newClient()
 
 		prompt := gai.Prompt{
 			Model: gai.ModelGPT4oMini,
@@ -39,8 +40,8 @@ func TestOpenAIClient_Complete(t *testing.T) {
 	})
 }
 
-func newOpenAIClient() *gai.OpenAIClient {
+func newClient() *openai.Client {
 	_ = env.Load(".env.test.local")
 
-	return gai.NewOpenAIClient(gai.NewOpenAIClientOptions{Key: env.GetStringOrDefault("OPENAI_KEY", "")})
+	return openai.NewClient(openai.NewClientOptions{Key: env.GetStringOrDefault("OPENAI_KEY", "")})
 }
