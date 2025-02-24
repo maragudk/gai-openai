@@ -1,6 +1,8 @@
-# template
+# GAI for OpenAI
 
-[![CI](https://github.com/maragudk/template/actions/workflows/ci.yml/badge.svg)](https://github.com/maragudk/template/actions/workflows/ci.yml)
+[![CI](https://github.com/maragudk/openai/actions/workflows/ci.yml/badge.svg)](https://github.com/maragudk/openai/actions/workflows/ci.yml)
+
+[GAI](https://github.com/maragudk/gai) client for [OpenAI](https://openai.com) models and compatible APIs, such as [LlamaCPP](https://github.com/ggml-org/llama.cpp).
 
 Made with ✨sparkles✨ by [maragu](https://www.maragu.dev/).
 
