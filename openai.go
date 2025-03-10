@@ -51,9 +51,10 @@ func NewClient(opts NewClientOptions) *Client {
 	}
 }
 
-// Complete satisfies [Completer].
-func (c *Client) Complete(ctx context.Context, p gai.Prompt) gai.CompletionResponse {
+// ChatComplete satisfies [gai.ChatCompleter].
+func (c *Client) ChatComplete(ctx context.Context, p gai.Prompt) (gai.ChatCompleteResponse, error) {
 	var messages []openai.ChatCompletionMessageParamUnion
+
 	for _, m := range p.Messages {
 		switch m.Role {
 		case gai.MessageRoleUser:
@@ -84,7 +85,7 @@ func (c *Client) Complete(ctx context.Context, p gai.Prompt) gai.CompletionRespo
 
 	stream := c.Client.Chat.Completions.NewStreaming(ctx, params)
 
-	return gai.NewCompletionResponse(func(yield func(gai.MessagePart, error) bool) {
+	return gai.NewChatCompleteResponse(func(yield func(gai.MessagePart, error) bool) {
 		defer func() {
 			if err := stream.Close(); err != nil {
 				c.log.Info("Error closing stream", "error", err)
@@ -121,5 +122,7 @@ func (c *Client) Complete(ctx context.Context, p gai.Prompt) gai.CompletionRespo
 		if err := stream.Err(); err != nil {
 			yield(gai.MessagePart{}, err)
 		}
-	})
+	}), nil
 }
+
+var _ gai.ChatCompleter = (*Client)(nil)

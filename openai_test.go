@@ -7,29 +7,30 @@ import (
 	"maragu.dev/gai"
 	"maragu.dev/is"
 
-	"maragu.dev/openai"
+	openai "maragu.dev/gai-openai"
 )
 
-func TestNewOpenAIClient(t *testing.T) {
+func TestNewClient(t *testing.T) {
 	t.Run("can create a new client with a key", func(t *testing.T) {
-		client := gai.NewOpenAIClient(gai.NewOpenAIClientOptions{Key: "123"})
+		client := openai.NewClient(openai.NewClientOptions{Key: "123"})
 		is.NotNil(t, client)
 	})
 }
 
-func TestOpenAIClient_Complete(t *testing.T) {
+func TestClient_ChatComplete(t *testing.T) {
 	t.Run("can send a streaming chat completion request", func(t *testing.T) {
 		c := newClient()
 
-		prompt := gai.Prompt{
-			Model: gai.ModelGPT4oMini,
+		p := gai.Prompt{
+			Model: openai.ModelGPT4oMini,
 			Messages: []gai.Message{
 				gai.NewUserTextMessage("Hi!"),
 			},
 			Temperature: gai.Ptr(0.0),
 		}
 
-		res := c.Complete(t.Context(), prompt)
+		res, err := c.ChatComplete(t.Context(), p)
+		is.NotError(t, err)
 
 		var text string
 		for part, err := range res.Parts() {
