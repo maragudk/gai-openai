@@ -1,6 +1,7 @@
 package openai_test
 
 import (
+	"strings"
 	"testing"
 
 	"maragu.dev/env"
@@ -21,23 +22,44 @@ func TestClient_ChatComplete(t *testing.T) {
 	t.Run("can send a streaming chat completion request", func(t *testing.T) {
 		c := newClient()
 
-		p := gai.Prompt{
-			Model: openai.ModelGPT4oMini,
+		cc := c.NewChatCompleter(openai.NewChatCompleterOptions{Model: openai.ChatCompleteModelGPT4oMini})
+
+		req := gai.ChatCompleteRequest{
 			Messages: []gai.Message{
 				gai.NewUserTextMessage("Hi!"),
 			},
-			Temperature: gai.Ptr(0.0),
+			Temperature: gai.Ptr(gai.Temperature(0)),
 		}
 
-		res, err := c.ChatComplete(t.Context(), p)
+		res, err := cc.ChatComplete(t.Context(), req)
 		is.NotError(t, err)
 
-		var text string
+		var output string
 		for part, err := range res.Parts() {
 			is.NotError(t, err)
-			text += part.Text()
+			output += part.Text()
 		}
-		is.Equal(t, "Hello! How can I assist you today?", text)
+		is.Equal(t, "Hello! How can I assist you today?", output)
+	})
+}
+
+func TestClient_Embed(t *testing.T) {
+	t.Run("can create a text embedding", func(t *testing.T) {
+		c := newClient()
+
+		e := c.NewEmbedder(openai.NewEmbedderOptions{
+			Model:      openai.EmbedModelTextEmbedding3Small,
+			Dimensions: 1536,
+		})
+
+		req := gai.EmbedRequest{
+			Input: strings.NewReader("Embed this, please."),
+		}
+
+		res, err := e.Embed(t.Context(), req)
+		is.NotError(t, err)
+
+		is.Equal(t, 1536, len(res.Embedding))
 	})
 }
 

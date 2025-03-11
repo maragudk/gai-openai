@@ -5,7 +5,8 @@ go 1.24
 require (
 	github.com/openai/openai-go v0.1.0-alpha.62
 	maragu.dev/env v0.2.0
-	maragu.dev/gai v0.0.0-20250310133701-8cd00573dd8a
+	maragu.dev/errors v0.3.0
+	maragu.dev/gai v0.0.0-20250311101308-bd6287d07b0c
 	maragu.dev/is v0.2.0
 )
 
