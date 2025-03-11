@@ -8,12 +8,9 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/shared"
+	"maragu.dev/errors"
 	"maragu.dev/gai"
-)
-
-const (
-	ModelGPT4o     = gai.ChatModel(openai.ChatModelGPT4o)
-	ModelGPT4oMini = gai.ChatModel(openai.ChatModelGPT4oMini)
 )
 
 type Client struct {
@@ -51,11 +48,36 @@ func NewClient(opts NewClientOptions) *Client {
 	}
 }
 
+type ChatCompleter struct {
+	Client *openai.Client
+	log    *slog.Logger
+	model  ChatCompleteModel
+}
+
+type ChatCompleteModel string
+
+const (
+	ChatCompleteModelGPT4o     = ChatCompleteModel(openai.ChatModelGPT4o)
+	ChatCompleteModelGPT4oMini = ChatCompleteModel(openai.ChatModelGPT4oMini)
+)
+
+type NewChatCompleterOptions struct {
+	Model ChatCompleteModel
+}
+
+func (c *Client) NewChatCompleter(opts NewChatCompleterOptions) *ChatCompleter {
+	return &ChatCompleter{
+		Client: c.Client,
+		log:    c.log,
+		model:  opts.Model,
+	}
+}
+
 // ChatComplete satisfies [gai.ChatCompleter].
-func (c *Client) ChatComplete(ctx context.Context, p gai.Prompt) (gai.ChatCompleteResponse, error) {
+func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRequest) (gai.ChatCompleteResponse, error) {
 	var messages []openai.ChatCompletionMessageParamUnion
 
-	for _, m := range p.Messages {
+	for _, m := range req.Messages {
 		switch m.Role {
 		case gai.MessageRoleUser:
 			var parts []openai.ChatCompletionContentPartUnionParam
@@ -76,11 +98,11 @@ func (c *Client) ChatComplete(ctx context.Context, p gai.Prompt) (gai.ChatComple
 
 	params := openai.ChatCompletionNewParams{
 		Messages: openai.F(messages),
-		Model:    openai.F(openai.ChatModel(p.Model)),
+		Model:    openai.F(openai.ChatModel(c.model)),
 	}
 
-	if p.Temperature != nil {
-		params.Temperature = openai.F(*p.Temperature)
+	if req.Temperature != nil {
+		params.Temperature = openai.F(req.Temperature.Float64())
 	}
 
 	stream := c.Client.Chat.Completions.NewStreaming(ctx, params)
@@ -125,4 +147,74 @@ func (c *Client) ChatComplete(ctx context.Context, p gai.Prompt) (gai.ChatComple
 	}), nil
 }
 
-var _ gai.ChatCompleter = (*Client)(nil)
+var _ gai.ChatCompleter = (*ChatCompleter)(nil)
+
+type Embedder struct {
+	Client     *openai.Client
+	dimensions int
+	log        *slog.Logger
+	model      EmbedModel
+}
+
+type EmbedModel string
+
+const (
+	EmbedModelTextEmbedding3Large = EmbedModel(openai.EmbeddingModelTextEmbedding3Large)
+	EmbedModelTextEmbedding3Small = EmbedModel(openai.EmbeddingModelTextEmbedding3Small)
+)
+
+type NewEmbedderOptions struct {
+	Dimensions int
+	Model      EmbedModel
+}
+
+func (c *Client) NewEmbedder(opts NewEmbedderOptions) *Embedder {
+	// Validate dimensions
+	if opts.Dimensions <= 0 {
+		panic("dimensions must be greater than 0")
+	}
+
+	switch opts.Model {
+	case EmbedModelTextEmbedding3Large:
+		if opts.Dimensions > 3072 {
+			panic("dimensions must be less than or equal to 3072")
+		}
+	case EmbedModelTextEmbedding3Small:
+		if opts.Dimensions > 1536 {
+			panic("dimensions must be less than or equal to 1536")
+		}
+	default:
+		panic("invalid model " + string(opts.Model))
+	}
+
+	return &Embedder{
+		Client:     c.Client,
+		dimensions: opts.Dimensions,
+		log:        c.log,
+		model:      opts.Model,
+	}
+}
+
+// Embed satisfies [gai.Embedder].
+func (c *Embedder) Embed(ctx context.Context, req gai.EmbedRequest) (gai.EmbedResponse[float64], error) {
+	v := gai.ReadAllString(req.Input)
+
+	res, err := c.Client.Embeddings.New(ctx, openai.EmbeddingNewParams{
+		Input:          openai.F[openai.EmbeddingNewParamsInputUnion](shared.UnionString(v)),
+		Model:          openai.F(openai.EmbeddingModel(c.model)),
+		EncodingFormat: openai.F(openai.EmbeddingNewParamsEncodingFormatFloat),
+		Dimensions:     openai.F(int64(c.dimensions)),
+	})
+	if err != nil {
+		return gai.EmbedResponse[float64]{}, errors.Wrap(err, "error creating embeddings")
+	}
+	if len(res.Data) == 0 {
+		return gai.EmbedResponse[float64]{}, errors.New("no embeddings returned")
+	}
+
+	return gai.EmbedResponse[float64]{
+		Embedding: res.Data[0].Embedding,
+	}, nil
+}
+
+var _ gai.Embedder[float64] = (*Embedder)(nil)
