@@ -183,8 +183,6 @@ func (c *Client) NewEmbedder(opts NewEmbedderOptions) *Embedder {
 		if opts.Dimensions > 1536 {
 			panic("dimensions must be less than or equal to 1536")
 		}
-	default:
-		panic("invalid model " + string(opts.Model))
 	}
 
 	return &Embedder{
