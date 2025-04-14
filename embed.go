@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/shared"
 	"maragu.dev/errors"
 	"maragu.dev/gai"
 )
@@ -18,7 +17,7 @@ const (
 )
 
 type Embedder struct {
-	Client     *openai.Client
+	Client     openai.Client
 	dimensions int
 	log        *slog.Logger
 	model      EmbedModel
@@ -58,10 +57,10 @@ func (e *Embedder) Embed(ctx context.Context, req gai.EmbedRequest) (gai.EmbedRe
 	v := gai.ReadAllString(req.Input)
 
 	res, err := e.Client.Embeddings.New(ctx, openai.EmbeddingNewParams{
-		Input:          openai.F[openai.EmbeddingNewParamsInputUnion](shared.UnionString(v)),
-		Model:          openai.F(openai.EmbeddingModel(e.model)),
-		EncodingFormat: openai.F(openai.EmbeddingNewParamsEncodingFormatFloat),
-		Dimensions:     openai.F(int64(e.dimensions)),
+		Input:          openai.EmbeddingNewParamsInputUnion{OfString: openai.Opt(v)},
+		Model:          openai.EmbeddingModel(e.model),
+		EncodingFormat: openai.EmbeddingNewParamsEncodingFormatFloat,
+		Dimensions:     openai.Opt(int64(e.dimensions)),
 	})
 	if err != nil {
 		return gai.EmbedResponse[float64]{}, errors.Wrap(err, "error embedding")
