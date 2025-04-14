@@ -194,14 +194,14 @@ func (c *Client) NewEmbedder(opts NewEmbedderOptions) *Embedder {
 }
 
 // Embed satisfies [gai.Embedder].
-func (c *Embedder) Embed(ctx context.Context, req gai.EmbedRequest) (gai.EmbedResponse[float64], error) {
+func (e *Embedder) Embed(ctx context.Context, req gai.EmbedRequest) (gai.EmbedResponse[float64], error) {
 	v := gai.ReadAllString(req.Input)
 
-	res, err := c.Client.Embeddings.New(ctx, openai.EmbeddingNewParams{
+	res, err := e.Client.Embeddings.New(ctx, openai.EmbeddingNewParams{
 		Input:          openai.F[openai.EmbeddingNewParamsInputUnion](shared.UnionString(v)),
-		Model:          openai.F(openai.EmbeddingModel(c.model)),
+		Model:          openai.F(openai.EmbeddingModel(e.model)),
 		EncodingFormat: openai.F(openai.EmbeddingNewParamsEncodingFormatFloat),
-		Dimensions:     openai.F(int64(c.dimensions)),
+		Dimensions:     openai.F(int64(e.dimensions)),
 	})
 	if err != nil {
 		return gai.EmbedResponse[float64]{}, errors.Wrap(err, "error creating embeddings")
