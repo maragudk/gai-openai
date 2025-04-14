@@ -9,7 +9,7 @@ import (
 )
 
 type Client struct {
-	Client *openai.Client
+	Client openai.Client
 	log    *slog.Logger
 }
 

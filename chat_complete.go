@@ -17,7 +17,7 @@ const (
 )
 
 type ChatCompleter struct {
-	Client *openai.Client
+	Client openai.Client
 	log    *slog.Logger
 	model  ChatCompleteModel
 }
@@ -45,12 +45,15 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 			for _, part := range m.Parts {
 				switch part.Type {
 				case gai.MessagePartTypeText:
-					parts = append(parts, openai.TextPart(part.Text()))
+					parts = append(parts, openai.ChatCompletionContentPartUnionParam{OfText: &openai.ChatCompletionContentPartTextParam{Text: part.Text()}})
 				default:
 					panic("not implemented")
 				}
 			}
-			messages = append(messages, openai.UserMessageParts(parts...))
+
+			messages = append(messages, openai.ChatCompletionMessageParamUnion{OfUser: &openai.ChatCompletionUserMessageParam{
+				Content: openai.ChatCompletionUserMessageParamContentUnion{OfArrayOfContentParts: parts},
+			}})
 
 		default:
 			panic("not implemented")
@@ -58,12 +61,12 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 	}
 
 	params := openai.ChatCompletionNewParams{
-		Messages: openai.F(messages),
-		Model:    openai.F(openai.ChatModel(c.model)),
+		Messages: messages,
+		Model:    openai.ChatModel(c.model),
 	}
 
 	if req.Temperature != nil {
-		params.Temperature = openai.F(req.Temperature.Float64())
+		params.Temperature = openai.Opt(req.Temperature.Float64())
 	}
 
 	stream := c.Client.Chat.Completions.NewStreaming(ctx, params)
