@@ -12,7 +12,7 @@ import (
 
 func TestEmbedder_Embed(t *testing.T) {
 	t.Run("can embed a text", func(t *testing.T) {
-		c := newClient()
+		c := newClient(t)
 
 		e := c.NewEmbedder(openai.NewEmbedderOptions{
 			Model:      openai.EmbedModelTextEmbedding3Small,

@@ -39,24 +39,47 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 	var messages []openai.ChatCompletionMessageParamUnion
 
 	for _, m := range req.Messages {
+
 		switch m.Role {
 		case gai.MessageRoleUser:
 			var parts []openai.ChatCompletionContentPartUnionParam
 			for _, part := range m.Parts {
 				switch part.Type {
 				case gai.MessagePartTypeText:
-					parts = append(parts, openai.ChatCompletionContentPartUnionParam{OfText: &openai.ChatCompletionContentPartTextParam{Text: part.Text()}})
+					parts = append(parts, openai.ChatCompletionContentPartUnionParam{
+						OfText: &openai.ChatCompletionContentPartTextParam{Text: part.Text()},
+					})
+
 				default:
 					panic("not implemented")
 				}
 			}
 
-			messages = append(messages, openai.ChatCompletionMessageParamUnion{OfUser: &openai.ChatCompletionUserMessageParam{
-				Content: openai.ChatCompletionUserMessageParamContentUnion{OfArrayOfContentParts: parts},
-			}})
+			messages = append(messages, openai.ChatCompletionMessageParamUnion{
+				OfUser: &openai.ChatCompletionUserMessageParam{
+					Content: openai.ChatCompletionUserMessageParamContentUnion{OfArrayOfContentParts: parts},
+				},
+			})
 
-		default:
-			panic("not implemented")
+		case gai.MessageRoleAssistant:
+			var parts []openai.ChatCompletionAssistantMessageParamContentArrayOfContentPartUnion
+			for _, part := range m.Parts {
+				switch part.Type {
+				case gai.MessagePartTypeText:
+					parts = append(parts, openai.ChatCompletionAssistantMessageParamContentArrayOfContentPartUnion{
+						OfText: &openai.ChatCompletionContentPartTextParam{Text: part.Text()},
+					})
+
+				default:
+					panic("not implemented")
+				}
+			}
+
+			messages = append(messages, openai.ChatCompletionMessageParamUnion{
+				OfAssistant: &openai.ChatCompletionAssistantMessageParam{
+					Content: openai.ChatCompletionAssistantMessageParamContentUnion{OfArrayOfContentParts: parts},
+				},
+			})
 		}
 	}
 
