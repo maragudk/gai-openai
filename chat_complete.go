@@ -38,8 +38,15 @@ func (c *Client) NewChatCompleter(opts NewChatCompleterOptions) *ChatCompleter {
 func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRequest) (gai.ChatCompleteResponse, error) {
 	var messages []openai.ChatCompletionMessageParamUnion
 
-	for _, m := range req.Messages {
+	if req.System != nil {
+		messages = append(messages, openai.ChatCompletionMessageParamUnion{
+			OfSystem: &openai.ChatCompletionSystemMessageParam{
+				Content: openai.ChatCompletionSystemMessageParamContentUnion{OfString: openai.String(*req.System)},
+			},
+		})
+	}
 
+	for _, m := range req.Messages {
 		switch m.Role {
 		case gai.MessageRoleUser:
 			var parts []openai.ChatCompletionContentPartUnionParam

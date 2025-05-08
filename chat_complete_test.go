@@ -1,9 +1,11 @@
 package openai_test
 
 import (
+	"os"
 	"testing"
 
 	"maragu.dev/gai"
+	"maragu.dev/gai/tools"
 	"maragu.dev/is"
 
 	openai "maragu.dev/gai-openai"
@@ -56,6 +58,180 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 			}
 		}
 		is.Equal(t, `AI stands for "Artificial Intelligence."`, output)
+	})
+
+	t.Run("can use a tool", func(t *testing.T) {
+		t.Skip()
+
+		cc := newChatCompleter(t)
+
+		root, err := os.OpenRoot("testdata")
+		is.NotError(t, err)
+
+		req := gai.ChatCompleteRequest{
+			Messages: []gai.Message{
+				gai.NewUserTextMessage("What is in the readme.txt file?"),
+			},
+			Temperature: gai.Ptr(gai.Temperature(0)),
+			Tools: []gai.Tool{
+				tools.NewReadFile(root),
+			},
+		}
+
+		res, err := cc.ChatComplete(t.Context(), req)
+		is.NotError(t, err)
+
+		var output string
+		var found bool
+		var parts []gai.MessagePart
+		var result gai.ToolResult
+		for part, err := range res.Parts() {
+			is.NotError(t, err)
+
+			parts = append(parts, part)
+
+			switch part.Type {
+			case gai.MessagePartTypeToolCall:
+				toolCall := part.ToolCall()
+				for _, tool := range req.Tools {
+					if tool.Name == toolCall.Name {
+						found = true
+						content, err := tool.Function(t.Context(), toolCall.Args)
+						result = gai.ToolResult{
+							ID:      toolCall.ID,
+							Content: content,
+							Err:     err,
+						}
+						break
+					}
+				}
+
+			case gai.MessagePartTypeText:
+				output += part.Text()
+
+			default:
+				t.Fatal("unexpected message parts")
+			}
+		}
+
+		is.Equal(t, "I'll read the contents of the readme.txt file for you.", output)
+		is.True(t, found, "tool not found")
+		is.Equal(t, "Hi!\n", result.Content)
+		is.NotError(t, result.Err)
+
+		req.Messages = []gai.Message{
+			gai.NewUserTextMessage("What is in the readme.txt file?"),
+			{Role: gai.MessageRoleModel, Parts: parts},
+			gai.NewUserToolResultMessage(result),
+		}
+
+		res, err = cc.ChatComplete(t.Context(), req)
+		is.NotError(t, err)
+
+		output = ""
+		for part, err := range res.Parts() {
+			is.NotError(t, err)
+
+			switch part.Type {
+			case gai.MessagePartTypeText:
+				output += part.Text()
+
+			default:
+				t.Fatal("unexpected message parts")
+			}
+		}
+
+		is.Equal(t, `The readme.txt file simply contains the text "Hi!" - it's a very brief readme file.`, output)
+	})
+
+	t.Run("can use a tool with no args", func(t *testing.T) {
+		t.Skip()
+
+		cc := newChatCompleter(t)
+
+		root, err := os.OpenRoot("testdata")
+		is.NotError(t, err)
+
+		req := gai.ChatCompleteRequest{
+			Messages: []gai.Message{
+				gai.NewUserTextMessage("What is in the current directory?"),
+			},
+			Temperature: gai.Ptr(gai.Temperature(0)),
+			Tools: []gai.Tool{
+				tools.NewListDir(root),
+			},
+		}
+
+		res, err := cc.ChatComplete(t.Context(), req)
+		is.NotError(t, err)
+
+		var output string
+		var found bool
+		var parts []gai.MessagePart
+		var result gai.ToolResult
+		for part, err := range res.Parts() {
+			is.NotError(t, err)
+
+			parts = append(parts, part)
+
+			switch part.Type {
+			case gai.MessagePartTypeToolCall:
+				toolCall := part.ToolCall()
+				for _, tool := range req.Tools {
+					if tool.Name == toolCall.Name {
+						found = true
+						content, err := tool.Function(t.Context(), toolCall.Args)
+						result = gai.ToolResult{
+							ID:      toolCall.ID,
+							Content: content,
+							Err:     err,
+						}
+						break
+					}
+				}
+
+			case gai.MessagePartTypeText:
+				output += part.Text()
+
+			default:
+				t.Fatal("unexpected message parts")
+			}
+		}
+
+		is.Equal(t, "I'll help you list the contents of the current directory. I'll use the `list_dir` function to show you what files and directories are present.", output)
+		is.True(t, found, "tool not found")
+		is.Equal(t, `["readme.txt"]`, result.Content)
+		is.NotError(t, result.Err)
+	})
+
+	t.Run("can use a system prompt", func(t *testing.T) {
+		cc := newChatCompleter(t)
+
+		req := gai.ChatCompleteRequest{
+			Messages: []gai.Message{
+				gai.NewUserTextMessage("Hi!"),
+			},
+			System:      gai.Ptr("You always respond in French."),
+			Temperature: gai.Ptr(gai.Temperature(0)),
+		}
+
+		res, err := cc.ChatComplete(t.Context(), req)
+		is.NotError(t, err)
+
+		var output string
+		for part, err := range res.Parts() {
+			is.NotError(t, err)
+
+			switch part.Type {
+			case gai.MessagePartTypeText:
+				output += part.Text()
+
+			default:
+				t.Fatal("unexpected message parts")
+			}
+		}
+
+		is.Equal(t, "Bonjour ! Comment puis-je vous aider aujourd'hui ?", output)
 	})
 }
 
