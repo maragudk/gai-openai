@@ -61,7 +61,7 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 				},
 			})
 
-		case gai.MessageRoleAssistant:
+		case gai.MessageRoleModel:
 			var parts []openai.ChatCompletionAssistantMessageParamContentArrayOfContentPartUnion
 			for _, part := range m.Parts {
 				switch part.Type {
@@ -80,6 +80,9 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 					Content: openai.ChatCompletionAssistantMessageParamContentUnion{OfArrayOfContentParts: parts},
 				},
 			})
+
+		default:
+			panic("unknown role " + m.Role)
 		}
 	}
 

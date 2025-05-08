@@ -37,7 +37,7 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 		}
 		is.Equal(t, "Hello! How can I assist you today?", output)
 
-		req.Messages = append(req.Messages, gai.NewAssistantTextMessage("Hello! How can I assist you today?"))
+		req.Messages = append(req.Messages, gai.NewModelTextMessage("Hello! How can I assist you today?"))
 		req.Messages = append(req.Messages, gai.NewUserTextMessage("What does the acronym AI stand for? Be brief."))
 
 		res, err = cc.ChatComplete(t.Context(), req)
