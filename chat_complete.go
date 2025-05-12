@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -39,17 +40,14 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 	var messages []openai.ChatCompletionMessageParamUnion
 
 	if req.System != nil {
-		messages = append(messages, openai.ChatCompletionMessageParamUnion{
-			OfSystem: &openai.ChatCompletionSystemMessageParam{
-				Content: openai.ChatCompletionSystemMessageParamContentUnion{OfString: openai.String(*req.System)},
-			},
-		})
+		messages = append(messages, openai.SystemMessage(*req.System))
 	}
 
 	for _, m := range req.Messages {
 		switch m.Role {
 		case gai.MessageRoleUser:
 			var parts []openai.ChatCompletionContentPartUnionParam
+
 			for _, part := range m.Parts {
 				switch part.Type {
 				case gai.MessagePartTypeText:
@@ -57,19 +55,35 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 						OfText: &openai.ChatCompletionContentPartTextParam{Text: part.Text()},
 					})
 
+				case gai.MessagePartTypeToolResult:
+					// Even though this is just a part, we append to messages directly
+
+					// Take existing parts and append to messages first
+					if len(parts) > 0 {
+						messages = append(messages, openai.UserMessage(parts))
+					}
+					parts = nil
+
+					toolResult := part.ToolResult()
+					content := toolResult.Content
+					if toolResult.Err != nil {
+						content = fmt.Sprintf("Error: %s", toolResult.Err)
+					}
+					messages = append(messages, openai.ToolMessage(content, toolResult.ID))
+					continue
+
 				default:
 					panic("not implemented")
 				}
 			}
 
-			messages = append(messages, openai.ChatCompletionMessageParamUnion{
-				OfUser: &openai.ChatCompletionUserMessageParam{
-					Content: openai.ChatCompletionUserMessageParamContentUnion{OfArrayOfContentParts: parts},
-				},
-			})
+			if len(parts) > 0 {
+				messages = append(messages, openai.UserMessage(parts))
+			}
 
 		case gai.MessageRoleModel:
 			var parts []openai.ChatCompletionAssistantMessageParamContentArrayOfContentPartUnion
+
 			for _, part := range m.Parts {
 				switch part.Type {
 				case gai.MessagePartTypeText:
@@ -77,25 +91,63 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 						OfText: &openai.ChatCompletionContentPartTextParam{Text: part.Text()},
 					})
 
+				case gai.MessagePartTypeToolCall:
+					// Even though this is just a part, we append to messages directly
+
+					// Take existing parts and append to messages first
+					if len(parts) > 0 {
+						messages = append(messages, openai.AssistantMessage(parts))
+					}
+					parts = nil
+
+					toolCall := part.ToolCall()
+					messages = append(messages, openai.ChatCompletionMessageParamUnion{
+						OfAssistant: &openai.ChatCompletionAssistantMessageParam{
+							ToolCalls: []openai.ChatCompletionMessageToolCallParam{
+								{
+									ID: toolCall.ID,
+									Function: openai.ChatCompletionMessageToolCallFunctionParam{
+										Name:      toolCall.Name,
+										Arguments: string(toolCall.Args),
+									},
+								},
+							},
+						},
+					})
+					continue
+
 				default:
 					panic("not implemented")
 				}
 			}
 
-			messages = append(messages, openai.ChatCompletionMessageParamUnion{
-				OfAssistant: &openai.ChatCompletionAssistantMessageParam{
-					Content: openai.ChatCompletionAssistantMessageParamContentUnion{OfArrayOfContentParts: parts},
-				},
-			})
+			if len(parts) > 0 {
+				messages = append(messages, openai.AssistantMessage(parts))
+			}
 
 		default:
 			panic("unknown role " + m.Role)
 		}
 	}
 
+	var tools []openai.ChatCompletionToolParam
+	for _, tool := range req.Tools {
+		tools = append(tools, openai.ChatCompletionToolParam{
+			Function: openai.FunctionDefinitionParam{
+				Name:        tool.Name,
+				Description: openai.String(tool.Description),
+				Parameters: openai.FunctionParameters{
+					"type":       "object",
+					"properties": tool.Schema.Properties,
+				},
+			},
+		})
+	}
+
 	params := openai.ChatCompletionNewParams{
 		Messages: messages,
 		Model:    openai.ChatModel(c.model),
+		Tools:    tools,
 	}
 
 	if req.Temperature != nil {
@@ -120,10 +172,11 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 				break
 			}
 
-			if _, ok := acc.JustFinishedToolCall(); ok {
+			if toolCall, ok := acc.JustFinishedToolCall(); ok {
+				if !yield(gai.ToolCallPart(toolCall.Id, toolCall.Name, json.RawMessage(toolCall.Arguments)), nil) {
+					return
+				}
 				continue
-				// TODO handle tool call
-				// println("Tool call stream finished:", tool.Index, tool.Name, tool.Arguments)
 			}
 
 			if refusal, ok := acc.JustFinishedRefusal(); ok {
