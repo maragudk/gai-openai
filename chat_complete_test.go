@@ -97,6 +97,7 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 						content, err := tool.Function(t.Context(), toolCall.Args)
 						result = gai.ToolResult{
 							ID:      toolCall.ID,
+							Name:    toolCall.Name,
 							Content: content,
 							Err:     err,
 						}
@@ -179,6 +180,7 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 						content, err := tool.Function(t.Context(), toolCall.Args)
 						result = gai.ToolResult{
 							ID:      toolCall.ID,
+							Name:    toolCall.Name,
 							Content: content,
 							Err:     err,
 						}
