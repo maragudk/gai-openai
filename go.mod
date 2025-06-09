@@ -7,7 +7,7 @@ require (
 	maragu.dev/env v0.2.0
 	maragu.dev/errors v0.3.0
 	maragu.dev/gai v0.0.0-20250527154524-635a01ab9826
-	maragu.dev/is v0.3.0
+	maragu.dev/is v0.3.1
 )
 
 require (
