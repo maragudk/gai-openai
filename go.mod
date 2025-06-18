@@ -3,7 +3,7 @@ module maragu.dev/gai-openai
 go 1.24
 
 require (
-	github.com/openai/openai-go v1.5.0
+	github.com/openai/openai-go v1.6.0
 	maragu.dev/env v0.2.0
 	maragu.dev/errors v0.3.0
 	maragu.dev/gai v0.0.0-20250618084850-b7932c663fae
