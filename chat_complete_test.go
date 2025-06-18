@@ -94,7 +94,7 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 				for _, tool := range req.Tools {
 					if tool.Name == toolCall.Name {
 						found = true
-						content, err := tool.Function(t.Context(), toolCall.Args)
+						content, err := tool.Execute(t.Context(), toolCall.Args)
 						result = gai.ToolResult{
 							ID:      toolCall.ID,
 							Name:    toolCall.Name,
@@ -177,7 +177,7 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 				for _, tool := range req.Tools {
 					if tool.Name == toolCall.Name {
 						found = true
-						content, err := tool.Function(t.Context(), toolCall.Args)
+						content, err := tool.Execute(t.Context(), toolCall.Args)
 						result = gai.ToolResult{
 							ID:      toolCall.ID,
 							Name:    toolCall.Name,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/openai/openai-go"
 	"maragu.dev/gai"
@@ -138,7 +139,7 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 				Description: openai.String(tool.Description),
 				Parameters: openai.FunctionParameters{
 					"type":       "object",
-					"properties": tool.Schema.Properties,
+					"properties": normalizeToolSchemaProperties(tool.Schema.Properties),
 				},
 			},
 		})
@@ -173,7 +174,7 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 			}
 
 			if toolCall, ok := acc.JustFinishedToolCall(); ok {
-				if !yield(gai.ToolCallPart(toolCall.Id, toolCall.Name, json.RawMessage(toolCall.Arguments)), nil) {
+				if !yield(gai.ToolCallPart(toolCall.ID, toolCall.Name, json.RawMessage(toolCall.Arguments)), nil) {
 					return
 				}
 				continue
@@ -195,6 +196,56 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 			yield(gai.MessagePart{}, err)
 		}
 	}), nil
+}
+
+// normalizeToolSchemaProperties recursively normalizes schema properties for OpenAI compatibility
+func normalizeToolSchemaProperties(properties map[string]*gai.Schema) map[string]*gai.Schema {
+	if len(properties) == 0 {
+		return properties
+	}
+
+	result := make(map[string]*gai.Schema)
+	for key, schema := range properties {
+		result[key] = normalizeToolSchema(schema)
+	}
+	return result
+}
+
+// normalizeToolSchema creates a normalized copy of a gai.Schema with lowercase type names
+func normalizeToolSchema(schema *gai.Schema) *gai.Schema {
+	if schema == nil {
+		return nil
+	}
+
+	// Create a copy of the schema
+	normalized := &gai.Schema{
+		AnyOf:            schema.AnyOf,
+		Default:          schema.Default,
+		Description:      schema.Description,
+		Enum:             schema.Enum,
+		Example:          schema.Example,
+		Format:           schema.Format,
+		Items:            normalizeToolSchema(schema.Items),
+		MaxItems:         schema.MaxItems,
+		Maximum:          schema.Maximum,
+		MinItems:         schema.MinItems,
+		Minimum:          schema.Minimum,
+		Properties:       normalizeToolSchemaProperties(schema.Properties),
+		PropertyOrdering: schema.PropertyOrdering,
+		Required:         schema.Required,
+		Title:            schema.Title,
+		Type:             gai.SchemaType(strings.ToLower(string(schema.Type))),
+	}
+
+	// Recursively normalize anyOf schemas
+	if len(schema.AnyOf) > 0 {
+		normalized.AnyOf = make([]*gai.Schema, len(schema.AnyOf))
+		for i, s := range schema.AnyOf {
+			normalized.AnyOf[i] = normalizeToolSchema(s)
+		}
+	}
+
+	return normalized
 }
 
 var _ gai.ChatCompleter = (*ChatCompleter)(nil)
