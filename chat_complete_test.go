@@ -231,6 +231,38 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 
 		is.Equal(t, "Bonjour ! Comment puis-je vous aider aujourd'hui ?", output)
 	})
+
+	t.Run("tracks token usage", func(t *testing.T) {
+		cc := newChatCompleter(t)
+
+		req := gai.ChatCompleteRequest{
+			Messages: []gai.Message{
+				gai.NewUserTextMessage("Hi!"),
+			},
+			Temperature: gai.Ptr(gai.Temperature(0)),
+		}
+
+		res, err := cc.ChatComplete(t.Context(), req)
+		is.NotError(t, err)
+
+		// Consume the response to ensure token usage is populated
+		var output string
+		for part, err := range res.Parts() {
+			is.NotError(t, err)
+			if part.Type == gai.MessagePartTypeText {
+				output += part.Text()
+			}
+		}
+
+		// Check that we got a response
+		is.True(t, len(output) > 0, "should have response text")
+
+		// Check token usage in Meta.Usage
+		is.NotNil(t, res.Meta, "should have metadata")
+		t.Log(res.Meta.Usage.PromptTokens, res.Meta.Usage.CompletionTokens)
+		is.True(t, res.Meta.Usage.PromptTokens > 0, "should have prompt tokens")
+		is.True(t, res.Meta.Usage.CompletionTokens > 0, "should have completion tokens")
+	})
 }
 
 func newChatCompleter(t *testing.T) *openai.ChatCompleter {

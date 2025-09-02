@@ -5,9 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/openai/openai-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"maragu.dev/gai"
 )
 
@@ -22,6 +27,7 @@ type ChatCompleter struct {
 	Client openai.Client
 	log    *slog.Logger
 	model  ChatCompleteModel
+	tracer trace.Tracer
 }
 
 type NewChatCompleterOptions struct {
@@ -33,15 +39,29 @@ func (c *Client) NewChatCompleter(opts NewChatCompleterOptions) *ChatCompleter {
 		Client: c.Client,
 		log:    c.log,
 		model:  opts.Model,
+		tracer: otel.Tracer("maragu.dev/gai-openai"),
 	}
 }
 
 // ChatComplete satisfies [gai.ChatCompleter].
 func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRequest) (gai.ChatCompleteResponse, error) {
+	ctx, span := c.tracer.Start(ctx, "openai.chat_complete",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("ai.model", string(c.model)),
+			attribute.Int("ai.message_count", len(req.Messages)),
+		),
+	)
+	defer span.End()
+
 	var messages []openai.ChatCompletionMessageParamUnion
 
 	if req.System != nil {
 		messages = append(messages, openai.SystemMessage(*req.System))
+		span.SetAttributes(
+			attribute.Bool("ai.has_system_prompt", true),
+			attribute.String("ai.system_prompt", *req.System),
+		)
 	}
 
 	for _, m := range req.Messages {
@@ -132,6 +152,7 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 	}
 
 	var tools []openai.ChatCompletionToolParam
+	var toolNames []string
 	for _, tool := range req.Tools {
 		tools = append(tools, openai.ChatCompletionToolParam{
 			Function: openai.FunctionDefinitionParam{
@@ -143,21 +164,33 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 				},
 			},
 		})
+		toolNames = append(toolNames, tool.Name)
 	}
+	sort.Strings(toolNames)
+	span.SetAttributes(
+		attribute.Int("ai.tool_count", len(tools)),
+		attribute.StringSlice("ai.tools", toolNames),
+	)
 
 	params := openai.ChatCompletionNewParams{
 		Messages: messages,
 		Model:    openai.ChatModel(c.model),
 		Tools:    tools,
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{
+			IncludeUsage: openai.Bool(true),
+		},
 	}
 
 	if req.Temperature != nil {
 		params.Temperature = openai.Opt(req.Temperature.Float64())
+		span.SetAttributes(attribute.Float64("ai.temperature", req.Temperature.Float64()))
 	}
 
 	stream := c.Client.Chat.Completions.NewStreaming(ctx, params)
 
-	return gai.NewChatCompleteResponse(func(yield func(gai.MessagePart, error) bool) {
+	meta := &gai.ChatCompleteResponseMetadata{}
+
+	res := gai.NewChatCompleteResponse(func(yield func(gai.MessagePart, error) bool) {
 		defer func() {
 			if err := stream.Close(); err != nil {
 				c.log.Info("Error closing stream", "error", err)
@@ -169,33 +202,54 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 			chunk := stream.Current()
 			acc.AddChunk(chunk)
 
-			if _, ok := acc.JustFinishedContent(); ok {
-				break
-			}
+			if _, ok := acc.JustFinishedContent(); !ok {
+				if toolCall, ok := acc.JustFinishedToolCall(); ok {
+					if !yield(gai.ToolCallPart(toolCall.ID, toolCall.Name, json.RawMessage(toolCall.Arguments)), nil) {
+						return
+					}
+					continue
+				}
 
-			if toolCall, ok := acc.JustFinishedToolCall(); ok {
-				if !yield(gai.ToolCallPart(toolCall.ID, toolCall.Name, json.RawMessage(toolCall.Arguments)), nil) {
+				if refusal, ok := acc.JustFinishedRefusal(); ok {
+					err := fmt.Errorf("refusal: %v", refusal)
+					span.RecordError(err)
+					span.SetStatus(codes.Error, "model refused request")
+					yield(gai.MessagePart{}, err)
 					return
 				}
+
+				if len(chunk.Choices) > 0 {
+					if !yield(gai.TextMessagePart(chunk.Choices[0].Delta.Content), nil) {
+						return
+					}
+				}
+			}
+
+			if chunk.Usage.PromptTokens == 0 {
 				continue
 			}
 
-			if refusal, ok := acc.JustFinishedRefusal(); ok {
-				yield(gai.MessagePart{}, fmt.Errorf("refusal: %v", refusal))
-				return
+			meta.Usage = gai.ChatCompleteResponseUsage{
+				PromptTokens:     int(chunk.Usage.PromptTokens),
+				CompletionTokens: int(chunk.Usage.CompletionTokens),
 			}
-
-			if len(chunk.Choices) > 0 {
-				if !yield(gai.TextMessagePart(chunk.Choices[0].Delta.Content), nil) {
-					return
-				}
-			}
+			span.SetAttributes(
+				attribute.Int("ai.prompt_tokens", int(chunk.Usage.PromptTokens)),
+				attribute.Int("ai.completion_tokens", int(chunk.Usage.CompletionTokens)),
+				attribute.Int("ai.total_tokens", int(chunk.Usage.TotalTokens)),
+			)
 		}
 
 		if err := stream.Err(); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "stream error")
 			yield(gai.MessagePart{}, err)
 		}
-	}), nil
+	})
+
+	res.Meta = meta
+
+	return res, nil
 }
 
 // normalizeToolSchemaProperties recursively normalizes schema properties for OpenAI compatibility
