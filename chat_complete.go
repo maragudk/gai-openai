@@ -52,7 +52,6 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 			attribute.Int("ai.message_count", len(req.Messages)),
 		),
 	)
-	defer span.End()
 
 	var messages []openai.ChatCompletionMessageParamUnion
 
@@ -191,6 +190,8 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 	meta := &gai.ChatCompleteResponseMetadata{}
 
 	res := gai.NewChatCompleteResponse(func(yield func(gai.MessagePart, error) bool) {
+		defer span.End()
+
 		defer func() {
 			if err := stream.Close(); err != nil {
 				c.log.Info("Error closing stream", "error", err)
