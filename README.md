@@ -16,7 +16,7 @@ Made with ✨sparkles✨ by [maragu](https://www.maragu.dev/): independent softw
   - [x] Streaming
   - [x] System prompt
   - [x] Tool use
-  - [ ] Structured output
+- [x] Structured output
   - [ ] Multi-modal input
   - [ ] Multi-modal output
 - [x] Embedding
