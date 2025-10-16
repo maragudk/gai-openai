@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/shared"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -185,6 +186,27 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 		span.SetAttributes(attribute.Float64("ai.temperature", req.Temperature.Float64()))
 	}
 
+	if req.ResponseSchema != nil {
+		normalized := normalizeToolSchema(req.ResponseSchema)
+		jsonSchemaObject := schemaToJSONObject(normalized)
+		jsonSchema := shared.ResponseFormatJSONSchemaJSONSchemaParam{
+			Name:   responseSchemaName(req.ResponseSchema),
+			Strict: openai.Bool(true),
+			Schema: jsonSchemaObject,
+		}
+		if normalized.Description != "" {
+			jsonSchema.Description = openai.String(normalized.Description)
+		}
+
+		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
+			OfJSONSchema: &shared.ResponseFormatJSONSchemaParam{
+				JSONSchema: jsonSchema,
+			},
+		}
+
+		span.SetAttributes(attribute.Bool("ai.has_response_schema", true))
+	}
+
 	stream := c.Client.Chat.Completions.NewStreaming(ctx, params)
 
 	meta := &gai.ChatCompleteResponseMetadata{}
@@ -301,6 +323,94 @@ func normalizeToolSchema(schema *gai.Schema) *gai.Schema {
 	}
 
 	return normalized
+}
+
+func schemaToJSONObject(schema *gai.Schema) map[string]any {
+	if schema == nil {
+		return nil
+	}
+
+	data, err := json.Marshal(schema)
+	if err != nil {
+		panic(err)
+	}
+
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		panic(err)
+	}
+
+	ensureObjectSchemasDisallowAdditionalProperties(obj)
+	return obj
+}
+
+func ensureObjectSchemasDisallowAdditionalProperties(obj map[string]any) {
+	if obj == nil {
+		return
+	}
+
+	if t, ok := obj["type"].(string); ok && t == "object" {
+		if _, ok := obj["additionalProperties"]; !ok {
+			obj["additionalProperties"] = false
+		}
+		if props, ok := obj["properties"].(map[string]any); ok {
+			for _, v := range props {
+				if child, ok := v.(map[string]any); ok {
+					ensureObjectSchemasDisallowAdditionalProperties(child)
+				}
+			}
+		}
+	}
+
+	if items, ok := obj["items"].(map[string]any); ok {
+		ensureObjectSchemasDisallowAdditionalProperties(items)
+	} else if itemsArr, ok := obj["items"].([]any); ok {
+		for _, v := range itemsArr {
+			if child, ok := v.(map[string]any); ok {
+				ensureObjectSchemasDisallowAdditionalProperties(child)
+			}
+		}
+	}
+
+	if anyOf, ok := obj["anyOf"].([]any); ok {
+		for _, v := range anyOf {
+			if child, ok := v.(map[string]any); ok {
+				ensureObjectSchemasDisallowAdditionalProperties(child)
+			}
+		}
+	}
+}
+
+func responseSchemaName(schema *gai.Schema) string {
+	name := schema.Title
+	if name == "" {
+		name = "response"
+	}
+
+	const maxLen = 64
+	var b strings.Builder
+	b.Grow(len(name))
+
+	for _, r := range name {
+		if b.Len() >= maxLen {
+			break
+		}
+
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
+			b.WriteRune(r)
+		case r == ' ':
+			b.WriteByte('_')
+		default:
+			// Skip unsupported characters
+		}
+	}
+
+	if b.Len() == 0 {
+		return "response"
+	}
+
+	return b.String()
 }
 
 var _ gai.ChatCompleter = (*ChatCompleter)(nil)
