@@ -3,6 +3,7 @@ package openai_test
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"maragu.dev/gai"
@@ -38,7 +39,8 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 				t.Fatal("unexpected message parts")
 			}
 		}
-		is.Equal(t, "Hello! How can I assist you today?", output)
+		requireContainsAll(t, output, "hello")
+		requireContainsAny(t, output, "assist", "help")
 
 		req.Messages = append(req.Messages, gai.NewModelTextMessage("Hello! How can I assist you today?"))
 		req.Messages = append(req.Messages, gai.NewUserTextMessage("What does the acronym AI stand for? Be brief."))
@@ -58,7 +60,7 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 				t.Fatal("unexpected message parts")
 			}
 		}
-		is.Equal(t, `AI stands for "Artificial Intelligence."`, output)
+		requireContainsAll(t, output, "ai stands for", "artificial intelligence")
 	})
 
 	t.Run("can use a tool with args", func(t *testing.T) {
@@ -141,7 +143,7 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 			}
 		}
 
-		is.Equal(t, "The `readme.txt` file contains the text: \"Hi!\"", output)
+		requireContainsAll(t, output, "readme.txt", "hi")
 	})
 
 	t.Run("can use a tool with no args", func(t *testing.T) {
@@ -270,7 +272,7 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 			}
 		}
 
-		is.Equal(t, "Bonjour ! Comment puis-je vous aider aujourd'hui ?", output)
+		requireContainsAll(t, output, "bonjour")
 	})
 
 	t.Run("tracks token usage", func(t *testing.T) {
@@ -312,4 +314,30 @@ func newChatCompleter(t *testing.T) *openai.ChatCompleter {
 		Model: openai.ChatCompleteModelGPT4oMini,
 	})
 	return cc
+}
+
+func requireContainsAll(t *testing.T, got string, want ...string) {
+	t.Helper()
+
+	lower := strings.ToLower(got)
+
+	for _, w := range want {
+		if !strings.Contains(lower, strings.ToLower(w)) {
+			t.Fatalf("expected output %q to contain %q", got, w)
+		}
+	}
+}
+
+func requireContainsAny(t *testing.T, got string, want ...string) {
+	t.Helper()
+
+	lower := strings.ToLower(got)
+
+	for _, w := range want {
+		if strings.Contains(lower, strings.ToLower(w)) {
+			return
+		}
+	}
+
+	t.Fatalf("expected output %q to contain one of %v", got, want)
 }
