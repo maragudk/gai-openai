@@ -225,6 +225,16 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 			chunk := stream.Current()
 			acc.AddChunk(chunk)
 
+			if len(chunk.Choices) > 0 {
+				if reason := chunk.Choices[0].FinishReason; reason != "" {
+					mapped := mapChatFinishReason(reason)
+					if meta.FinishReason == nil || *meta.FinishReason != mapped {
+						meta.FinishReason = gai.Ptr(mapped)
+					}
+					span.SetAttributes(attribute.String("ai.finish_reason", string(mapped)))
+				}
+			}
+
 			if _, ok := acc.JustFinishedContent(); !ok {
 				if toolCall, ok := acc.JustFinishedToolCall(); ok {
 					if !yield(gai.ToolCallPart(toolCall.ID, toolCall.Name, json.RawMessage(toolCall.Arguments)), nil) {
@@ -235,6 +245,8 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 
 				if refusal, ok := acc.JustFinishedRefusal(); ok {
 					err := fmt.Errorf("refusal: %v", refusal)
+					meta.FinishReason = gai.Ptr(gai.ChatCompleteFinishReasonRefusal)
+					span.SetAttributes(attribute.String("ai.finish_reason", string(gai.ChatCompleteFinishReasonRefusal)))
 					span.RecordError(err)
 					span.SetStatus(codes.Error, "model refused request")
 					yield(gai.MessagePart{}, err)
@@ -261,6 +273,14 @@ func (c *ChatCompleter) ChatComplete(ctx context.Context, req gai.ChatCompleteRe
 				attribute.Int("ai.completion_tokens", int(chunk.Usage.CompletionTokens)),
 				attribute.Int("ai.total_tokens", int(chunk.Usage.TotalTokens)),
 			)
+		}
+
+		if meta.FinishReason == nil && len(acc.Choices) > 0 {
+			if reason := acc.Choices[0].FinishReason; reason != "" {
+				mapped := mapChatFinishReason(reason)
+				meta.FinishReason = gai.Ptr(mapped)
+				span.SetAttributes(attribute.String("ai.finish_reason", string(mapped)))
+			}
 		}
 
 		if err := stream.Err(); err != nil {
@@ -411,6 +431,21 @@ func responseSchemaName(schema *gai.Schema) string {
 	}
 
 	return b.String()
+}
+
+func mapChatFinishReason(reason string) gai.ChatCompleteFinishReason {
+	switch reason {
+	case string(openai.CompletionChoiceFinishReasonStop):
+		return gai.ChatCompleteFinishReasonStop
+	case string(openai.CompletionChoiceFinishReasonLength):
+		return gai.ChatCompleteFinishReasonLength
+	case string(openai.CompletionChoiceFinishReasonContentFilter):
+		return gai.ChatCompleteFinishReasonContentFilter
+	case "tool_calls", "function_call":
+		return gai.ChatCompleteFinishReasonToolCalls
+	default:
+		return gai.ChatCompleteFinishReasonUnknown
+	}
 }
 
 var _ gai.ChatCompleter = (*ChatCompleter)(nil)

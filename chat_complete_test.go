@@ -120,6 +120,9 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 		is.True(t, found, "tool not found")
 		is.Equal(t, "Hi!\n", result.Content)
 		is.NotError(t, result.Err)
+		is.NotNil(t, res.Meta, "metadata should be populated")
+		is.NotNil(t, res.Meta.FinishReason, "finish reason should be set")
+		is.Equal(t, gai.ChatCompleteFinishReasonToolCalls, *res.Meta.FinishReason)
 
 		req.Messages = []gai.Message{
 			gai.NewUserTextMessage("What is in the readme.txt file?"),
@@ -144,6 +147,8 @@ func TestChatCompleter_ChatComplete(t *testing.T) {
 		}
 
 		requireContainsAll(t, output, "readme.txt", "hi")
+		is.NotNil(t, res.Meta.FinishReason)
+		is.Equal(t, gai.ChatCompleteFinishReasonStop, *res.Meta.FinishReason)
 	})
 
 	t.Run("can use a tool with no args", func(t *testing.T) {
