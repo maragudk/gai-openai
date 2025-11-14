@@ -6,6 +6,8 @@
 
 [GAI](https://github.com/maragudk/gai) client for [OpenAI](https://openai.com) models and compatible APIs, such as [LlamaCPP](https://github.com/ggml-org/llama.cpp).
 
+⚠️ This project is now folded directly into the main module at [GAI](https://github.com/maragudk/gai)! ⚠️
+
 Made with ✨sparkles✨ by [maragu](https://www.maragu.dev/): independent software consulting for cloud-native Go apps & AI engineering.
 
 [Contact me at markus@maragu.dk](mailto:markus@maragu.dk) for consulting work, or perhaps an invoice to support this project?
